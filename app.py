@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
 
-# System Auth
+# System Authentication
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 gcp_json = os.environ.get('GCP_JSON')
 creds_dict = json.loads(gcp_json)
@@ -30,11 +30,12 @@ def activate():
                 db_status = str(row[1]).strip().upper()
                 
                 if db_voucher == voucher_input and db_status == 'ACTIVE':
+                    # STEP 1: Update the Ledger
                     sheet.update_cell(i + 1, 2, 'USED')
-                    # This line is what triggers the transition to the success page
+                    # STEP 2: Tell the HTML to show the Success Page
                     return render_template('index.html', success=True, voucher=voucher_input)
         
-        return "INVALID CODE. Please contact the Lab Manager."
+        return render_template('index.html', error="INVALID CODE. PLEASE CONTACT LAB MANAGER.")
     except Exception as e:
         return f"SYSTEM ERROR: {str(e)}"
 
