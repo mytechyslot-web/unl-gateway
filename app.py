@@ -1,3 +1,22 @@
+import os
+import json
+from flask import Flask, render_template, request
+import gspread
+from google.oauth2.service_account import Credentials
+
+app = Flask(__name__)
+
+# System Auth
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+gcp_json = os.environ.get('GCP_JSON')
+creds_dict = json.loads(gcp_json)
+creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+client = gspread.authorize(creds)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
 @app.route('/activate', methods=['POST'])
 def activate():
     voucher_input = request.form.get('voucher', '').strip().upper()
@@ -11,12 +30,13 @@ def activate():
                 db_status = str(row[1]).strip().upper()
                 
                 if db_voucher == voucher_input and db_status == 'ACTIVE':
-                    # THE CRITICAL CHANGE: Update the sheet AND return SUCCESS immediately
                     sheet.update_cell(i + 1, 2, 'USED')
-                    # This tells Flask to RENDER the success version of your template
+                    # This line is what triggers the transition to the success page
                     return render_template('index.html', success=True, voucher=voucher_input)
         
         return "INVALID CODE. Please contact the Lab Manager."
     except Exception as e:
-        # If there's a timeout or error, we see it here
         return f"SYSTEM ERROR: {str(e)}"
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=5000)
