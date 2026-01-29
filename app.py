@@ -1,49 +1,22 @@
-import os
-import json
-from flask import Flask, render_template, request
-import gspread
-from google.oauth2.service_account import Credentials
-
-app = Flask(__name__)
-
-# Connect to Google Sheets Ledger
-def get_gspread_client():
-    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    # We will set 'GCP_JSON' in the Cloud settings later
-    creds_json = json.loads(os.environ.get("GCP_JSON"))
-    creds = Credentials.from_service_account_info(creds_json, scopes=scopes)
-    return gspread.authorize(creds)
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 @app.route('/activate', methods=['POST'])
 def activate():
-    voucher_code = request.form.get('voucher')
-    user_ip = request.remote_addr
-    
+    voucher_input = request.form.get('voucher', '').strip()
     try:
-        client = get_gspread_client()
-        # Open your Lab_CRM sheet
         sheet = client.open("Lab_CRM").worksheet("Vouchers")
-        cell = sheet.find(voucher_code)
+        # Get all rows to bypass header-name dependency
+        records = sheet.get_all_values()
         
-        if cell:
-            # Assuming Status is Column 3 (C)
-            status = sheet.cell(cell.row, 3).value
-            if status == "Available":
-                sheet.update_cell(cell.row, 3, "USED")
-                sheet.update_cell(cell.row, 4, user_ip)
+        for i, row in enumerate(records):
+            # row[0] is Column A, row[1] is Column B
+            if len(row) >= 2:
+                db_voucher = str(row[0]).strip()
+                db_status = str(row[1]).strip()
                 
-                # Mark as ACTIVE in Master Sheet
-                master = client.open("Lab_CRM").sheet1
-                master.append_row([user_ip, "ACTIVE", "Voucher Used"])
-                return "<h1>ACCESS GRANTED</h1><p>Neural Link Established.</p>"
+                if db_voucher == voucher_input and db_status == 'ACTIVE':
+                    # Success: Update the status to USED
+                    sheet.update_cell(i + 1, 2, 'USED')
+                    return render_template('index.html', success=True, voucher=voucher_input)
         
-        return "<h1>INVALID CODE</h1><p>Please contact the Lab Manager.</p>"
+        return "INVALID CODE. Please contact the Lab Manager."
     except Exception as e:
-        return f"<h1>SYSTEM ERROR</h1><p>{str(e)}</p>"
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+        return f"SYSTEM ERROR: {str(e)}"
